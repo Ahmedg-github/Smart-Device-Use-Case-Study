@@ -1,0 +1,201 @@
+---
+title: "Smart_Devices"
+author: "Ahmed"
+date: '2022-05-30'
+output: html_document
+---
+
+## Setting up environment
+### Installing and loading required packages to set up my R environment
+
+```{r}
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("readr")
+install.packages("tidyr")
+install.packages("lubridate")
+install.packages("skimr")
+install.packages("janitor")
+install.packages("ggplot2")
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(lubridate)
+library(skimr)
+library(janitor)
+library(ggplot2)
+```
+
+
+## Importing datasets
+### Loading the datasets I will be using for the analysis
+
+Note: Datasets were downloaded from [here](https://www.kaggle.com/datasets/arashnic/fitbit) and were originally sourced from Amazon Mechanical Turk between 03.12.2016-05.12.2016.
+```{r}
+Daily_Intensities <- read_csv("Daily_Intensities.csv")
+Daily_Steps <- read_csv("Daily_Steps.csv")
+```
+
+
+## Observe datasets
+### Looking at the datasets and the structures
+
+```{r}
+head(Daily_Intensities)
+head(Daily_Steps)
+```
+
+```{r}
+colnames(Daily_Intensities)
+str(Daily_Intensities)
+skim_without_charts(Daily_Intensities)
+```
+
+```{r}
+colnames(Daily_Steps)
+str(Daily_Steps)
+skim_without_charts(Daily_Steps)
+```
+
+
+## Cleaning the datasets
+### Creating new data frames with the clean data I will be using
+
+Note: Created new data frames using only data we need for our analysis and formatted date structure for activity levels
+```{r}
+Daily_Activity <- Daily_Intensities %>% 
+  select(Id, ActivityDay, FairlyActiveMinutes, VeryActiveMinutes) %>% 
+  mutate(TotalActiveMinutes = FairlyActiveMinutes + VeryActiveMinutes) %>%
+  mutate(ActivityDay = mdy(ActivityDay))
+
+glimpse(Daily_Activity)
+```
+
+Note: Formatted date structure for step counts
+```{r}
+Daily_Steps <- Daily_Steps %>% 
+  mutate(ActivityDay = mdy(ActivityDay))
+
+glimpse(Daily_Steps)
+```
+
+
+## Analyzing the data
+### Creating new data frames to analyze the data and observe trends by daily average
+
+Note: Checking for outliers and inconsistent data
+```{r}
+sort(table(Daily_Activity$Id))
+sort(table(Daily_Steps$Id))
+```
+
+Note: Created new data frames showing averages for each user, only taking data from users with enough data to be consistent
+```{r}
+Average_Activity <- Daily_Activity %>% 
+  group_by(Id) %>% 
+  filter(n()>=18) %>% 
+  summarise(AvgDailyActivity = mean(TotalActiveMinutes))
+
+Average_Steps <- Daily_Steps %>% 
+  group_by(Id) %>% 
+  filter(n()>=18) %>% 
+  summarise(AvgDailySteps = mean(StepTotal))
+```
+
+Note: Created new data frame to combine activity data and step count data by daily average
+```{r}
+Total_Daily_Averages <- Average_Activity %>% 
+  inner_join(Average_Steps, by = "Id")
+```
+
+```{r}
+head(Total_Daily_Averages)
+glimpse(Total_Daily_Averages)
+```
+
+
+## Analyzing the data (cont.)
+### Creating new data frames to analyze the data and observe trends by type of day average
+
+Note: Checking type of day structure, weekend vs. weekday
+```{r}
+table(wday(Daily_Activity$ActivityDay, label = FALSE))
+table(wday(Daily_Activity$ActivityDay, label = TRUE))
+```
+
+Note: Created data frames for average activity based on type of day
+```{r}
+Weekday_Activity <- Daily_Activity %>% 
+  group_by(Id) %>% 
+  filter(n()>=18) %>%
+  filter(wday(ActivityDay) != 1) %>% 
+  filter(wday(ActivityDay) != 7) %>% 
+  summarise(AvgWeekdayActivity = mean(TotalActiveMinutes))
+
+Weekend_Activity <- Daily_Activity %>% 
+  group_by(Id) %>% 
+  filter(n()>=18) %>%
+  filter(wday(ActivityDay) != 2) %>% 
+  filter(wday(ActivityDay) != 3) %>% 
+  filter(wday(ActivityDay) != 4) %>% 
+  filter(wday(ActivityDay) != 5) %>% 
+  filter(wday(ActivityDay) != 6) %>% 
+  summarise(AvgWeekendActivity = mean(TotalActiveMinutes))
+```
+
+
+Note: Created data frames for average step count based on type of day
+```{r}
+Weekday_Steps <- Daily_Steps %>% 
+  group_by(Id) %>% 
+  filter(n()>=18) %>%
+  filter(wday(ActivityDay) != 1) %>% 
+  filter(wday(ActivityDay) != 7) %>% 
+  summarise(AvgWeekdaySteps = mean(StepTotal))
+
+Weekend_Steps <- Daily_Steps %>% 
+  group_by(Id) %>% 
+  filter(n()>=18) %>%
+  filter(wday(ActivityDay) != 2) %>% 
+  filter(wday(ActivityDay) != 3) %>% 
+  filter(wday(ActivityDay) != 4) %>% 
+  filter(wday(ActivityDay) != 5) %>% 
+  filter(wday(ActivityDay) != 6) %>% 
+  summarise(AvgWeekendSteps = mean(StepTotal))
+```
+
+Note: Created new data frame to combine activity data and step count data by type of day average
+```{r}
+Day_Type_Averages <- Weekday_Activity %>% 
+  inner_join(Weekend_Activity, by = "Id") %>% 
+  inner_join(Weekday_Steps, by = "Id") %>% 
+  inner_join(Weekend_Steps, by = "Id")
+
+head(Day_Type_Averages)
+glimpse(Day_Type_Averages)
+```
+
+
+## Plotting the data
+### Creating a graph to compare the activity and step count data
+
+```{r}
+ggplot(data = Total_Daily_Averages) +
+  geom_smooth(mapping = aes(x = AvgDailySteps, y = AvgDailyActivity)) +
+  geom_point(mapping = aes(x = AvgDailySteps, y = AvgDailyActivity)) +
+  labs(title = "Daily Steps compared to Daily Activity", x = "Average Daily Steps", y = "Average Daily Activity (min.)")
+```
+
+
+## Exporting the data
+### Creating .csv files to export the data for further analysis and visualization in spreadsheets and Tableau
+
+```{r}
+write_csv(Total_Daily_Averages, "Total_Daily_Averages.csv")
+write_csv(Day_Type_Averages, "Day_Type_Averages.csv")
+```
+
